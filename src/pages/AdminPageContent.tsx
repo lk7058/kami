@@ -704,18 +704,33 @@ export default function AdminPageContent() {
               </CardHeader>
               <CardContent className="space-y-5">
                 {/* Setup guide */}
-                <div className="rounded-xl p-4 bg-gradient-to-br from-cyan-500/5 to-blue-500/5 border border-cyan-400/20">
-                  <p className="text-xs font-semibold text-cyan-400 mb-2 flex items-center gap-1.5">
-                    <Code className="w-3.5 h-3.5" />
-                    启用真实邮件发送的步骤
-                  </p>
-                  <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
-                    <li>启动后端邮件服务：<code className="px-1.5 py-0.5 bg-secondary/80 rounded text-cyan-300 text-[11px]">cd server && npm start</code></li>
-                    <li>在下方填写 SMTP 服务器信息并保存</li>
-                    <li>点击「测试连接」确认配置正确</li>
-                    <li>开启「启用邮件发送」开关</li>
-                  </ol>
-                  <p className="text-xs text-muted-foreground/60 mt-2">未配置时自动使用开发模式（验证码显示在页面）</p>
+                <div className="space-y-4">
+                  {/* Dev Mode Info */}
+                  <div className="rounded-xl p-4 bg-gradient-to-br from-green-500/5 to-emerald-500/5 border border-green-400/20">
+                    <p className="text-xs font-semibold text-green-400 mb-2 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      推荐方案：开发模式（无需部署服务器）
+                    </p>
+                    <div className="text-xs text-muted-foreground space-y-1.5">
+                      <p>• 直接在页面上显示验证码，用户复制输入即可</p>
+                      <p>• 无需配置 SMTP，无需部署后端服务器</p>
+                      <p>• 适合小规模使用和测试</p>
+                    </div>
+                  </div>
+
+                  {/* Production Mode Info */}
+                  <div className="rounded-xl p-4 bg-gradient-to-br from-cyan-500/5 to-blue-500/5 border border-cyan-400/20">
+                    <p className="text-xs font-semibold text-cyan-400 mb-2 flex items-center gap-1.5">
+                      <Code className="w-3.5 h-3.5" />
+                      进阶方案：真实邮件发送
+                    </p>
+                    <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
+                      <li>启动后端邮件服务：<code className="px-1.5 py-0.5 bg-secondary/80 rounded text-cyan-300 text-[11px]">cd server && npm start</code></li>
+                      <li>在下方填写 SMTP 服务器信息并保存</li>
+                      <li>点击「测试连接」确认配置正确</li>
+                      <li>开启「启用邮件发送」开关</li>
+                    </ol>
+                  </div>
                 </div>
 
                 {/* Enable toggle */}
