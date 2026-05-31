@@ -25,6 +25,13 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { toast } from 'sonner';
 import { cn, safeCopyToClipboard } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -33,6 +40,8 @@ import {
   getCardKeys,
   getAnnouncements,
   getSmtpConfig,
+  getEmailJsConfig,
+  getVerificationMode,
   addCardKey,
   batchAddCardKeys,
   addAnnouncement,
@@ -42,9 +51,11 @@ import {
   changeAdminPassword,
   resetCardKey,
   updateSmtpConfig,
+  updateEmailJsConfig,
+  updateVerificationMode,
   testSmtpConfig,
 } from '@/lib/store';
-import { CardKey, Announcement, SmtpConfig } from '@/lib/types';
+import { CardKey, Announcement, SmtpConfig, EmailJsConfig, VerificationMode } from '@/lib/types';
 import {
   Lock,
   LogOut,
@@ -68,6 +79,8 @@ import {
   CheckCircle2,
   XCircle,
   Code,
+  Zap,
+  Users,
 } from 'lucide-react';
 
 export default function AdminPageContent() {
@@ -80,6 +93,15 @@ export default function AdminPageContent() {
   const [cardKeys, setCardKeys] = useState<CardKey[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Verification mode
+  const [verificationMode, setVerificationMode] = useState<VerificationMode>(() => {
+    try {
+      return getVerificationMode();
+    } catch {
+      return 'none';
+    }
+  });
 
   // SMTP
   const [smtpConfig, setSmtpConfig] = useState<SmtpConfig>(() => {
@@ -99,6 +121,20 @@ export default function AdminPageContent() {
   });
   const [testingSmtp, setTestingSmtp] = useState(false);
   const [smtpTestResult, setSmtpTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // EmailJS
+  const [emailJsConfig, setEmailJsConfig] = useState<EmailJsConfig>(() => {
+    try {
+      return getEmailJsConfig();
+    } catch {
+      return {
+        serviceId: '',
+        templateId: '',
+        publicKey: '',
+        enabled: false,
+      };
+    }
+  });
 
   // Single add
   const [newCode, setNewCode] = useState('');
@@ -131,11 +167,19 @@ export default function AdminPageContent() {
       setCardKeys(getCardKeys());
       setAnnouncements(getAnnouncements());
       setSmtpConfig(getSmtpConfig());
+      setEmailJsConfig(getEmailJsConfig());
+      setVerificationMode(getVerificationMode());
       setError(null);
     } catch (err) {
       console.error('[Admin] Failed to refresh data:', err);
       setError('数据加载失败，请刷新页面重试');
     }
+  };
+
+  const handleSaveVerificationMode = (mode: VerificationMode) => {
+    updateVerificationMode(mode);
+    setVerificationMode(mode);
+    toast.success('验证模式已更新');
   };
 
   const handleSaveSmtp = () => {
@@ -144,12 +188,17 @@ export default function AdminPageContent() {
     refreshData();
   };
 
+  const handleSaveEmailJs = () => {
+    updateEmailJsConfig(emailJsConfig);
+    toast.success('EmailJS 配置已保存');
+    refreshData();
+  };
+
   const handleTestSmtp = async () => {
     if (!smtpConfig.host || !smtpConfig.username || !smtpConfig.password || !smtpConfig.fromEmail) {
       toast.error('请填写完整的 SMTP 配置信息');
       return;
     }
-    // Save config first
     updateSmtpConfig(smtpConfig);
 
     setTestingSmtp(true);
@@ -189,7 +238,6 @@ export default function AdminPageContent() {
     toast.info('已退出登录');
   };
 
-  // 添加单张卡密
   const handleAddSingleKey = () => {
     if (!newCode.trim()) {
       toast.error('请输入卡密');
@@ -206,7 +254,6 @@ export default function AdminPageContent() {
     }
   };
 
-  // 批量添加卡密
   const handleBatchAdd = () => {
     if (!batchCodes.trim()) {
       toast.error('请输入卡密');
@@ -304,7 +351,6 @@ export default function AdminPageContent() {
     used: cardKeys.filter((k) => k.status === 'used').length,
   };
 
-  // ─── Login Screen ───
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen grid-bg flex items-center justify-center px-4">
@@ -357,11 +403,9 @@ export default function AdminPageContent() {
     );
   }
 
-  // ─── Admin Dashboard ───
   return (
     <div className="min-h-screen grid-bg pt-24 pb-16 px-4">
       <div className="max-w-6xl mx-auto">
-        {/* Header */}
         <div className="flex items-center justify-between mb-8 animate-fade-in-up">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold">
@@ -381,7 +425,6 @@ export default function AdminPageContent() {
           </div>
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-8">
           {[
             { label: '总卡密数', value: stats.total, color: 'text-primary' },
@@ -397,7 +440,6 @@ export default function AdminPageContent() {
           ))}
         </div>
 
-        {/* Tabs */}
         <Tabs defaultValue="overview" onValueChange={setActiveTab}>
           <TabsList className="grid grid-cols-4 w-full max-w-lg bg-secondary/50 mb-6">
             <TabsTrigger value="overview" className="gap-1">
@@ -412,13 +454,12 @@ export default function AdminPageContent() {
               <Megaphone className="w-4 h-4" />
               公告管理
             </TabsTrigger>
-            <TabsTrigger value="smtp" className="gap-1">
+            <TabsTrigger value="email" className="gap-1">
               <Mail className="w-4 h-4" />
               邮件设置
             </TabsTrigger>
           </TabsList>
 
-          {/* ─── Overview Tab ─── */}
           <TabsContent value="overview" className="animate-fade-in">
             <Card className="glass-card border-border/30">
               <CardHeader>
@@ -479,9 +520,7 @@ export default function AdminPageContent() {
             </Card>
           </TabsContent>
 
-          {/* ─── Keys Tab ─── */}
           <TabsContent value="keys" className="animate-fade-in space-y-6">
-            {/* Add Single Key */}
             <Card className="glass-card border-border/30">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -527,7 +566,6 @@ export default function AdminPageContent() {
               </CardContent>
             </Card>
 
-            {/* Keys List */}
             <Card className="glass-card border-border/30">
               <CardHeader>
                 <CardTitle className="text-lg">
@@ -632,7 +670,6 @@ export default function AdminPageContent() {
             </Card>
           </TabsContent>
 
-          {/* ─── Announcements Tab ─── */}
           <TabsContent value="announcements" className="animate-fade-in space-y-6">
             <Card className="glass-card border-border/30">
               <CardHeader>
@@ -674,8 +711,8 @@ export default function AdminPageContent() {
                         </div>
                         <p className="text-xs text-muted-foreground line-clamp-2">{a.content}</p>
                         <p className="text-xs text-muted-foreground/60 mt-1">
-                            {format(new Date(a.createdAt), 'yyyy-MM-dd HH:mm')}
-                          </p>
+                          {format(new Date(a.createdAt), 'yyyy-MM-dd HH:mm')}
+                        </p>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => handleEditAnnouncement(a)}>
@@ -692,180 +729,272 @@ export default function AdminPageContent() {
             </Card>
           </TabsContent>
 
-          {/* ─── SMTP Settings Tab ─── */}
-          <TabsContent value="smtp" className="animate-fade-in space-y-6">
+          <TabsContent value="email" className="animate-fade-in space-y-6">
             <Card className="glass-card border-border/30">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Mail className="w-5 h-5 text-primary" />
-                  SMTP 邮件设置
+                  验证模式设置
                 </CardTitle>
-                <CardDescription>配置 SMTP 服务器以发送邮箱验证码</CardDescription>
+                <CardDescription>选择用户领取卡密时的验证方式</CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
-                {/* Setup guide */}
                 <div className="space-y-4">
-                  {/* Dev Mode Info */}
-                  <div className="rounded-xl p-4 bg-gradient-to-br from-green-500/5 to-emerald-500/5 border border-green-400/20">
-                    <p className="text-xs font-semibold text-green-400 mb-2 flex items-center gap-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      推荐方案：开发模式（无需部署服务器）
-                    </p>
-                    <div className="text-xs text-muted-foreground space-y-1.5">
-                      <p>• 直接在页面上显示验证码，用户复制输入即可</p>
-                      <p>• 无需配置 SMTP，无需部署后端服务器</p>
-                      <p>• 适合小规模使用和测试</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div
+                      className={cn(
+                        'p-4 rounded-xl border cursor-pointer transition-all',
+                        verificationMode === 'none'
+                          ? 'bg-primary/10 border-primary/30'
+                          : 'bg-secondary/30 border-border/30 hover:border-border/60'
+                      )}
+                      onClick={() => handleSaveVerificationMode('none')}
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <Users className={cn('w-5 h-5', verificationMode === 'none' ? 'text-primary' : 'text-muted-foreground')} />
+                        <span className="font-semibold text-sm">无需验证</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        用户输入邮箱后直接领取卡密，无需验证码验证。最简单的方式。
+                      </p>
+                    </div>
+                    <div
+                      className={cn(
+                        'p-4 rounded-xl border cursor-pointer transition-all',
+                        verificationMode === 'dev'
+                          ? 'bg-primary/10 border-primary/30'
+                          : 'bg-secondary/30 border-border/30 hover:border-border/60'
+                      )}
+                      onClick={() => handleSaveVerificationMode('dev')}
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <Code className={cn('w-5 h-5', verificationMode === 'dev' ? 'text-primary' : 'text-muted-foreground')} />
+                        <span className="font-semibold text-sm">页面显示验证码</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        验证码直接显示在页面上，用户复制输入即可。无需配置邮件服务。
+                      </p>
+                    </div>
+                    <div
+                      className={cn(
+                        'p-4 rounded-xl border cursor-pointer transition-all',
+                        verificationMode === 'emailjs'
+                          ? 'bg-primary/10 border-primary/30'
+                          : 'bg-secondary/30 border-border/30 hover:border-border/60'
+                      )}
+                      onClick={() => handleSaveVerificationMode('emailjs')}
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <Zap className={cn('w-5 h-5', verificationMode === 'emailjs' ? 'text-primary' : 'text-muted-foreground')} />
+                        <span className="font-semibold text-sm">EmailJS 发送</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        使用 EmailJS 服务发送邮件验证码。免费额度，无需部署后端。
+                      </p>
+                    </div>
+                    <div
+                      className={cn(
+                        'p-4 rounded-xl border cursor-pointer transition-all',
+                        verificationMode === 'smtp'
+                          ? 'bg-primary/10 border-primary/30'
+                          : 'bg-secondary/30 border-border/30 hover:border-border/60'
+                      )}
+                      onClick={() => handleSaveVerificationMode('smtp')}
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <Server className={cn('w-5 h-5', verificationMode === 'smtp' ? 'text-primary' : 'text-muted-foreground')} />
+                        <span className="font-semibold text-sm">SMTP 发送</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        配置自己的 SMTP 服务器发送邮件。需要部署后端服务。
+                      </p>
                     </div>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
 
-                  {/* Production Mode Info */}
-                  <div className="rounded-xl p-4 bg-gradient-to-br from-cyan-500/5 to-blue-500/5 border border-cyan-400/20">
-                    <p className="text-xs font-semibold text-cyan-400 mb-2 flex items-center gap-1.5">
-                      <Code className="w-3.5 h-3.5" />
-                      进阶方案：真实邮件发送
-                    </p>
+            {verificationMode === 'emailjs' && (
+              <Card className="glass-card border-border/30">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-primary" />
+                    EmailJS 配置
+                  </CardTitle>
+                  <CardDescription>配置 EmailJS 以发送邮件验证码</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="rounded-xl p-4 bg-secondary/30 border border-border/30">
+                    <p className="text-xs font-semibold text-muted-foreground mb-2">配置步骤</p>
                     <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
-                      <li>启动后端邮件服务：<code className="px-1.5 py-0.5 bg-secondary/80 rounded text-cyan-300 text-[11px]">cd server && npm start</code></li>
-                      <li>在下方填写 SMTP 服务器信息并保存</li>
-                      <li>点击「测试连接」确认配置正确</li>
-                      <li>开启「启用邮件发送」开关</li>
+                      <li>访问 <a href="https://www.emailjs.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">emailjs.com</a> 注册账号</li>
+                      <li>添加邮箱服务（如 Gmail、QQ 邮箱等）获取 Service ID</li>
+                      <li>创建邮件模板，模板参数名使用 <code className="px-1 bg-background rounded">to_email</code> 和 <code className="px-1 bg-background rounded">verification_code</code></li>
+                      <li>获取 Public Key</li>
+                      <li>在下方填入信息并保存</li>
                     </ol>
                   </div>
-                </div>
-
-                {/* Enable toggle */}
-                <div className="flex items-center justify-between p-4 bg-secondary/30 rounded-lg border border-border/30">
-                  <div>
-                    <p className="font-medium text-foreground text-sm">启用邮件发送</p>
-                    <p className="text-xs text-muted-foreground">开启后用户领取卡密时需要邮箱验证</p>
-                  </div>
-                  <button
-                    onClick={() => setSmtpConfig(c => ({ ...c, enabled: !c.enabled }))}
-                    className={cn(
-                      'w-12 h-6 rounded-full transition-all duration-300 relative',
-                      smtpConfig.enabled ? 'bg-primary' : 'bg-muted'
-                    )}
-                  >
-                    <div className={cn(
-                      'absolute w-5 h-5 rounded-full bg-white top-0.5 transition-all duration-300',
-                      smtpConfig.enabled ? 'left-6' : 'left-0.5'
-                    )} />
-                  </button>
-                </div>
-
-                {/* SMTP Fields */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>SMTP 服务器</Label>
-                    <Input
-                      placeholder="smtp.qq.com"
-                      value={smtpConfig.host}
-                      onChange={(e) => setSmtpConfig(c => ({ ...c, host: e.target.value }))}
-                      className="bg-secondary/50 border-border/50 focus:border-primary/50"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>端口</Label>
-                    <Input
-                      type="number"
-                      placeholder="465"
-                      value={smtpConfig.port}
-                      onChange={(e) => setSmtpConfig(c => ({ ...c, port: parseInt(e.target.value) || 0 }))}
-                      className="bg-secondary/50 border-border/50 focus:border-primary/50"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>发件邮箱</Label>
-                    <Input
-                      placeholder="your@email.com"
-                      value={smtpConfig.fromEmail}
-                      onChange={(e) => setSmtpConfig(c => ({ ...c, fromEmail: e.target.value }))}
-                      className="bg-secondary/50 border-border/50 focus:border-primary/50"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>发件人名称</Label>
-                    <Input
-                      placeholder="GPT Image2"
-                      value={smtpConfig.fromName}
-                      onChange={(e) => setSmtpConfig(c => ({ ...c, fromName: e.target.value }))}
-                      className="bg-secondary/50 border-border/50 focus:border-primary/50"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>邮箱账号</Label>
-                    <Input
-                      placeholder="SMTP 登录用户名"
-                      value={smtpConfig.username}
-                      onChange={(e) => setSmtpConfig(c => ({ ...c, username: e.target.value }))}
-                      className="bg-secondary/50 border-border/50 focus:border-primary/50"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>邮箱密码 / 授权码</Label>
-                    <Input
-                      type="password"
-                      placeholder="SMTP 登录密码或授权码"
-                      value={smtpConfig.password}
-                      onChange={(e) => setSmtpConfig(c => ({ ...c, password: e.target.value }))}
-                      className="bg-secondary/50 border-border/50 focus:border-primary/50"
-                    />
-                  </div>
-                </div>
-
-                {/* Common SMTP presets */}
-                <div className="p-4 bg-secondary/30 rounded-lg border border-border/30">
-                  <p className="text-xs font-semibold text-muted-foreground mb-2">常用 SMTP 参考</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <Server className="w-3 h-3" />
-                      <span>QQ邮箱: smtp.qq.com:465</span>
+                  <div className="grid grid-cols-1 gap-4">
+                    <div className="space-y-2">
+                      <Label>Service ID</Label>
+                      <Input
+                        placeholder="service_xxx"
+                        value={emailJsConfig.serviceId}
+                        onChange={(e) => setEmailJsConfig(c => ({ ...c, serviceId: e.target.value }))}
+                        className="bg-secondary/50 border-border/50 focus:border-primary/50"
+                      />
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Server className="w-3 h-3" />
-                      <span>网易163: smtp.163.com:465</span>
+                    <div className="space-y-2">
+                      <Label>Template ID</Label>
+                      <Input
+                        placeholder="template_xxx"
+                        value={emailJsConfig.templateId}
+                        onChange={(e) => setEmailJsConfig(c => ({ ...c, templateId: e.target.value }))}
+                        className="bg-secondary/50 border-border/50 focus:border-primary/50"
+                      />
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Server className="w-3 h-3" />
-                      <span>Gmail: smtp.gmail.com:465</span>
+                    <div className="space-y-2">
+                      <Label>Public Key</Label>
+                      <Input
+                        placeholder="public key"
+                        value={emailJsConfig.publicKey}
+                        onChange={(e) => setEmailJsConfig(c => ({ ...c, publicKey: e.target.value }))}
+                        className="bg-secondary/50 border-border/50 focus:border-primary/50"
+                      />
                     </div>
                   </div>
-                </div>
-
-                {/* Action buttons */}
-                <div className="flex gap-3">
-                  <Button onClick={handleSaveSmtp} className="gap-2 glow-cyan hover:glow-cyan">
+                  <Button onClick={handleSaveEmailJs} className="gap-2 glow-cyan hover:glow-cyan">
                     <CheckCircle2 className="w-4 h-4" />
                     保存配置
                   </Button>
-                  <Button variant="outline" onClick={handleTestSmtp} disabled={testingSmtp} className="gap-2 border-border/30">
-                    {testingSmtp ? (
-                      <div className="w-4 h-4 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
-                    ) : (
-                      <Mail className="w-4 h-4" />
-                    )}
-                    {testingSmtp ? '测试中...' : '测试连接'}
-                  </Button>
-                </div>
+                </CardContent>
+              </Card>
+            )}
 
-                {/* Test result */}
-                {smtpTestResult && (
-                  <div className={cn(
-                    'flex items-center gap-2 p-3 rounded-lg text-sm',
-                    smtpTestResult.success
-                      ? 'bg-green-400/10 border border-green-400/30 text-green-400'
-                      : 'bg-destructive/10 border border-destructive/30 text-destructive'
-                  )}>
-                    {smtpTestResult.success ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <XCircle className="w-4 h-4 shrink-0" />}
-                    {smtpTestResult.message}
+            {verificationMode === 'smtp' && (
+              <Card className="glass-card border-border/30">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Server className="w-5 h-5 text-primary" />
+                    SMTP 配置
+                  </CardTitle>
+                  <CardDescription>配置 SMTP 服务器以发送邮件验证码</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="rounded-xl p-4 bg-secondary/30 border border-border/30">
+                    <p className="text-xs font-semibold text-muted-foreground mb-2">部署说明</p>
+                    <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
+                      <li>启动后端邮件服务：<code className="px-1.5 py-0.5 bg-background/80 rounded text-primary text-[11px]">cd server && npm start</code></li>
+                      <li>在下方填写 SMTP 服务器信息并保存</li>
+                      <li>点击「测试连接」确认配置正确</li>
+                    </ol>
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>SMTP 服务器</Label>
+                      <Input
+                        placeholder="smtp.qq.com"
+                        value={smtpConfig.host}
+                        onChange={(e) => setSmtpConfig(c => ({ ...c, host: e.target.value }))}
+                        className="bg-secondary/50 border-border/50 focus:border-primary/50"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>端口</Label>
+                      <Input
+                        type="number"
+                        placeholder="465"
+                        value={smtpConfig.port}
+                        onChange={(e) => setSmtpConfig(c => ({ ...c, port: parseInt(e.target.value) || 0 }))}
+                        className="bg-secondary/50 border-border/50 focus:border-primary/50"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>发件邮箱</Label>
+                      <Input
+                        placeholder="your@email.com"
+                        value={smtpConfig.fromEmail}
+                        onChange={(e) => setSmtpConfig(c => ({ ...c, fromEmail: e.target.value }))}
+                        className="bg-secondary/50 border-border/50 focus:border-primary/50"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>发件人名称</Label>
+                      <Input
+                        placeholder="GPT Image2"
+                        value={smtpConfig.fromName}
+                        onChange={(e) => setSmtpConfig(c => ({ ...c, fromName: e.target.value }))}
+                        className="bg-secondary/50 border-border/50 focus:border-primary/50"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>邮箱账号</Label>
+                      <Input
+                        placeholder="SMTP 登录用户名"
+                        value={smtpConfig.username}
+                        onChange={(e) => setSmtpConfig(c => ({ ...c, username: e.target.value }))}
+                        className="bg-secondary/50 border-border/50 focus:border-primary/50"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>邮箱密码 / 授权码</Label>
+                      <Input
+                        type="password"
+                        placeholder="SMTP 登录密码或授权码"
+                        value={smtpConfig.password}
+                        onChange={(e) => setSmtpConfig(c => ({ ...c, password: e.target.value }))}
+                        className="bg-secondary/50 border-border/50 focus:border-primary/50"
+                      />
+                    </div>
+                  </div>
+                  <div className="p-4 bg-secondary/30 rounded-lg border border-border/30">
+                    <p className="text-xs font-semibold text-muted-foreground mb-2">常用 SMTP 参考</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <Server className="w-3 h-3" />
+                        <span>QQ邮箱: smtp.qq.com:465</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Server className="w-3 h-3" />
+                        <span>网易163: smtp.163.com:465</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Server className="w-3 h-3" />
+                        <span>Gmail: smtp.gmail.com:465</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <Button onClick={handleSaveSmtp} className="gap-2 glow-cyan hover:glow-cyan">
+                      <CheckCircle2 className="w-4 h-4" />
+                      保存配置
+                    </Button>
+                    <Button variant="outline" onClick={handleTestSmtp} disabled={testingSmtp} className="gap-2 border-border/30">
+                      {testingSmtp ? (
+                        <div className="w-4 h-4 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
+                      ) : (
+                        <Mail className="w-4 h-4" />
+                      )}
+                      {testingSmtp ? '测试中...' : '测试连接'}
+                    </Button>
+                  </div>
+                  {smtpTestResult && (
+                    <div className={cn(
+                      'flex items-center gap-2 p-3 rounded-lg text-sm',
+                      smtpTestResult.success
+                        ? 'bg-green-400/10 border border-green-400/30 text-green-400'
+                        : 'bg-destructive/10 border border-destructive/30 text-destructive'
+                    )}>
+                      {smtpTestResult.success ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <XCircle className="w-4 h-4 shrink-0" />}
+                      {smtpTestResult.message}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
         </Tabs>
 
-        {/* ─── Batch Add Dialog ─── */}
         <Dialog open={showBatchDialog} onOpenChange={setShowBatchDialog}>
           <DialogContent className="glass-card border-border/30 max-w-lg">
             <DialogHeader>
@@ -903,7 +1032,6 @@ export default function AdminPageContent() {
           </DialogContent>
         </Dialog>
 
-        {/* ─── Announcement Dialog ─── */}
         <Dialog open={showAnnounceDialog} onOpenChange={(v) => { setShowAnnounceDialog(v); if (!v) setEditingAnnouncement(null); }}>
           <DialogContent className="glass-card border-border/30 max-w-lg">
             <DialogHeader>
@@ -947,7 +1075,6 @@ export default function AdminPageContent() {
           </DialogContent>
         </Dialog>
 
-        {/* ─── Delete Confirm ─── */}
         <AlertDialog open={!!showDeleteConfirm} onOpenChange={() => setShowDeleteConfirm(null)}>
           <AlertDialogContent className="glass-card border-border/30">
             <AlertDialogHeader>
@@ -972,7 +1099,6 @@ export default function AdminPageContent() {
           </AlertDialogContent>
         </AlertDialog>
 
-        {/* ─── Change Password Dialog ─── */}
         <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
           <DialogContent className="glass-card border-border/30">
             <DialogHeader>

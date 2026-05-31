@@ -18,6 +18,8 @@ export interface Announcement {
   isActive: boolean;
 }
 
+export type VerificationMode = 'none' | 'emailjs' | 'smtp' | 'dev';
+
 export interface SmtpConfig {
   host: string;
   port: number;
@@ -25,6 +27,13 @@ export interface SmtpConfig {
   password: string;
   fromEmail: string;
   fromName: string;
+  enabled: boolean;
+}
+
+export interface EmailJsConfig {
+  serviceId: string;
+  templateId: string;
+  publicKey: string;
   enabled: boolean;
 }
 
@@ -41,7 +50,9 @@ export interface AppState {
   announcements: Announcement[];
   adminPassword: string;
   isLoggedIn: boolean;
+  verificationMode: VerificationMode;
   smtpConfig: SmtpConfig;
+  emailJsConfig: EmailJsConfig;
   emailVerifications: EmailVerification[];
 }
 

@@ -1,4 +1,4 @@
-import { CardKey, Announcement, AppState, SmtpConfig, EmailVerification, generateId, generateVerificationCode } from '@/lib/types';
+import { CardKey, Announcement, AppState, SmtpConfig, EmailJsConfig, EmailVerification, VerificationMode, generateId, generateVerificationCode } from '@/lib/types';
 
 const STORAGE_KEY = 'gpt-image2-admin';
 
@@ -9,6 +9,13 @@ const defaultSmtpConfig: SmtpConfig = {
   password: '',
   fromEmail: '',
   fromName: 'GPT Image2',
+  enabled: false,
+};
+
+const defaultEmailJsConfig: EmailJsConfig = {
+  serviceId: '',
+  templateId: '',
+  publicKey: '',
   enabled: false,
 };
 
@@ -39,14 +46,15 @@ function getDefaultState(): AppState {
     announcements: defaultAnnouncements,
     adminPassword: 'admin123',
     isLoggedIn: false,
+    verificationMode: 'none',
     smtpConfig: defaultSmtpConfig,
+    emailJsConfig: defaultEmailJsConfig,
     emailVerifications: [],
   };
 }
 
 export function loadState(): AppState {
   try {
-    // Check if localStorage is available
     if (typeof localStorage === 'undefined') {
       return getDefaultState();
     }
@@ -54,22 +62,24 @@ export function loadState(): AppState {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      // Ensure all required fields exist (migration safety)
       const defaults = getDefaultState();
       return {
         cardKeys: Array.isArray(parsed.cardKeys) ? parsed.cardKeys : defaults.cardKeys,
         announcements: Array.isArray(parsed.announcements) ? parsed.announcements : defaults.announcements,
         adminPassword: typeof parsed.adminPassword === 'string' ? parsed.adminPassword : defaults.adminPassword,
-        isLoggedIn: false, // Always require re-login on page load
+        isLoggedIn: false,
+        verificationMode: parsed.verificationMode || 'none',
         smtpConfig: parsed.smtpConfig && typeof parsed.smtpConfig === 'object'
           ? { ...defaults.smtpConfig, ...parsed.smtpConfig }
           : defaults.smtpConfig,
+        emailJsConfig: parsed.emailJsConfig && typeof parsed.emailJsConfig === 'object'
+          ? { ...defaults.emailJsConfig, ...parsed.emailJsConfig }
+          : defaults.emailJsConfig,
         emailVerifications: Array.isArray(parsed.emailVerifications) ? parsed.emailVerifications : defaults.emailVerifications,
       };
     }
   } catch (e) {
     console.warn('[Store] Failed to load state, using defaults:', e);
-    // If corrupted data, clear it
     try { 
       if (typeof localStorage !== 'undefined') {
         localStorage.removeItem(STORAGE_KEY); 
@@ -85,7 +95,6 @@ export function saveState(state: AppState): void {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }
   } catch {
-    // ignore errors
   }
 }
 
@@ -97,46 +106,44 @@ export function getAnnouncements(): Announcement[] {
   return loadState().announcements;
 }
 
+export function getVerificationMode(): VerificationMode {
+  return loadState().verificationMode;
+}
+
 export function getSmtpConfig(): SmtpConfig {
   return loadState().smtpConfig;
 }
 
-// ─── Email Validation ───
+export function getEmailJsConfig(): EmailJsConfig {
+  return loadState().emailJsConfig;
+}
+
 export function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.toLowerCase().trim());
 }
 
-// ─── Check if email already claimed ───
 export function hasEmailClaimed(email: string): boolean {
   const state = loadState();
   return state.cardKeys.some((k) => k.claimedBy?.toLowerCase() === email.toLowerCase().trim());
 }
 
-// ─── Send Verification Email ───
-// 如配置了 SMTP 则通过后端代理发送，失败时直接报错（不再降级）
-// 未配置 SMTP 时使用开发模式（验证码显示在页面）
 export async function sendVerificationEmail(email: string): Promise<{ success: boolean; error?: string }> {
   const state = loadState();
-  const smtp = state.smtpConfig;
   const trimmedEmail = email.toLowerCase().trim();
 
-  // Check if email already claimed
   if (hasEmailClaimed(trimmedEmail)) {
     return { success: false, error: '该邮箱已领取过卡密，每个邮箱仅限领取一次' };
   }
 
-  // Check if there are available keys
   const availableCount = state.cardKeys.filter((k) => k.status === 'unused').length;
   if (availableCount === 0) {
     return { success: false, error: '暂无可用卡密，请联系管理员' };
   }
 
-  // Generate verification code
   const code = generateVerificationCode();
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + 5 * 60 * 1000); // 5 minutes
+  const expiresAt = new Date(now.getTime() + 5 * 60 * 1000);
 
-  // Store verification code (remove old ones for same email)
   state.emailVerifications = state.emailVerifications.filter((v) => v.email !== trimmedEmail);
   state.emailVerifications.push({
     id: generateId(),
@@ -147,20 +154,47 @@ export async function sendVerificationEmail(email: string): Promise<{ success: b
   });
   saveState(state);
 
-  // If SMTP enabled and configured, send via proxy (no fallback on failure)
-  if (smtp.enabled && smtp.host && smtp.username && smtp.password && smtp.fromEmail) {
+  if (state.verificationMode === 'emailjs' && state.emailJsConfig.enabled && 
+      state.emailJsConfig.serviceId && state.emailJsConfig.templateId && state.emailJsConfig.publicKey) {
+    try {
+      const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          service_id: state.emailJsConfig.serviceId,
+          template_id: state.emailJsConfig.templateId,
+          user_id: state.emailJsConfig.publicKey,
+          template_params: {
+            to_email: trimmedEmail,
+            verification_code: code,
+          },
+        }),
+      });
+
+      if (response.ok) {
+        console.log('[EmailJS] Sent successfully');
+        return { success: true };
+      }
+
+      const text = await response.text();
+      return { success: false, error: `EmailJS 发送失败: ${text}` };
+    } catch (e) {
+      return { success: false, error: 'EmailJS 连接失败，请检查配置' };
+    }
+  } else if (state.verificationMode === 'smtp' && state.smtpConfig.enabled && 
+             state.smtpConfig.host && state.smtpConfig.username && state.smtpConfig.password && state.smtpConfig.fromEmail) {
     try {
       const response = await fetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           smtp: {
-            host: smtp.host,
-            port: smtp.port,
-            username: smtp.username,
-            password: smtp.password,
-            fromEmail: smtp.fromEmail,
-            fromName: smtp.fromName,
+            host: state.smtpConfig.host,
+            port: state.smtpConfig.port,
+            username: state.smtpConfig.username,
+            password: state.smtpConfig.password,
+            fromEmail: state.smtpConfig.fromEmail,
+            fromName: state.smtpConfig.fromName,
           },
           to: trimmedEmail,
           subject: `【GPT Image2】邮箱验证码：${code}`,
@@ -197,20 +231,19 @@ export async function sendVerificationEmail(email: string): Promise<{ success: b
     } catch {
       return { success: false, error: '邮件服务不可用，请联系管理员' };
     }
+  } else if (state.verificationMode === 'dev') {
+    console.log(`[Email] Dev mode: code for ${trimmedEmail} is ${code}`);
+    return { success: true };
   }
 
-  // Dev mode: code stored locally and shown on page
-  console.log(`[Email] Dev mode: code for ${trimmedEmail} is ${code}`);
   return { success: true };
 }
 
-// ─── Get available card key count ───
 export function getAvailableKeyCount(): number {
   const state = loadState();
   return state.cardKeys.filter((k) => k.status === 'unused').length;
 }
 
-// ─── Verify Email Code ───
 export function verifyEmailCode(email: string, code: string): boolean {
   const state = loadState();
   const trimmedEmail = email.toLowerCase().trim();
@@ -221,26 +254,21 @@ export function verifyEmailCode(email: string, code: string): boolean {
 
   if (!verification) return false;
 
-  // Check expiry
   if (new Date(verification.expiresAt) < new Date()) {
-    // Remove expired
     state.emailVerifications = state.emailVerifications.filter((v) => v.id !== verification.id);
     saveState(state);
     return false;
   }
 
-  // Remove used verification
   state.emailVerifications = state.emailVerifications.filter((v) => v.email !== trimmedEmail);
   saveState(state);
   return true;
 }
 
-// ─── Claim Card Key (after email verification) ───
 export function claimCardKey(email: string): CardKey | null {
   const state = loadState();
   const trimmedEmail = email.toLowerCase().trim();
 
-  // Check if already claimed
   if (state.cardKeys.some((k) => k.claimedBy?.toLowerCase() === trimmedEmail)) {
     return null;
   }
@@ -256,19 +284,16 @@ export function claimCardKey(email: string): CardKey | null {
   return availableKey;
 }
 
-// ─── Query by email ───
 export function searchCardKeyByEmail(email: string): CardKey | undefined {
   const state = loadState();
   return state.cardKeys.find((k) => k.claimedBy?.toLowerCase() === email.toLowerCase().trim());
 }
 
-// ─── Query by code (keep for backward compat) ───
 export function searchCardKey(code: string): CardKey | undefined {
   const state = loadState();
   return state.cardKeys.find((k) => k.code === code.toUpperCase().trim());
 }
 
-// ─── Admin: Add Card Key ───
 export function addCardKey(code: string, note?: string): CardKey | null {
   const state = loadState();
   const trimmedCode = code.toUpperCase().trim();
@@ -309,7 +334,6 @@ export function batchAddCardKeys(codesText: string, note?: string): { success: n
   return { success, failed, duplicates };
 }
 
-// ─── Announcement Management ───
 export function addAnnouncement(announcement: Omit<Announcement, 'id' | 'createdAt' | 'updatedAt'>): Announcement {
   const state = loadState();
   const newAnnouncement: Announcement = {
@@ -341,7 +365,6 @@ export function deleteAnnouncement(id: string): boolean {
   return true;
 }
 
-// ─── Admin Auth ───
 export function verifyAdmin(password: string): boolean {
   const state = loadState();
   return password === state.adminPassword;
@@ -373,15 +396,24 @@ export function resetCardKey(id: string): boolean {
   return true;
 }
 
-// ─── SMTP Config ───
+export function updateVerificationMode(mode: VerificationMode): void {
+  const state = loadState();
+  state.verificationMode = mode;
+  saveState(state);
+}
+
 export function updateSmtpConfig(config: Partial<SmtpConfig>): void {
   const state = loadState();
   state.smtpConfig = { ...state.smtpConfig, ...config };
   saveState(state);
 }
 
-// ─── Test SMTP ───
-// 通过后端代理测试 SMTP 连接，失败时给出明确提示
+export function updateEmailJsConfig(config: Partial<EmailJsConfig>): void {
+  const state = loadState();
+  state.emailJsConfig = { ...state.emailJsConfig, ...config };
+  saveState(state);
+}
+
 export async function testSmtpConfig(): Promise<{ success: boolean; error?: string }> {
   const state = loadState();
   const smtp = state.smtpConfig;
@@ -414,7 +446,6 @@ export async function testSmtpConfig(): Promise<{ success: boolean; error?: stri
   }
 }
 
-// ─── Dev helper: get pending verification code (for dev mode) ───
 export function getDevVerificationCode(email: string): string | null {
   const state = loadState();
   const trimmedEmail = email.toLowerCase().trim();

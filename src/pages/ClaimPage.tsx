@@ -5,8 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { claimCardKey, sendVerificationEmail, verifyEmailCode, isValidEmail, hasEmailClaimed, getDevVerificationCode, getSmtpConfig, getAvailableKeyCount } from '@/lib/store';
-import { Gift, Sparkles, Copy, Check, Infinity, Mail, Shield, ArrowRight, Code, KeyRound } from 'lucide-react';
+import { claimCardKey, sendVerificationEmail, verifyEmailCode, isValidEmail, hasEmailClaimed, getDevVerificationCode, getVerificationMode, getAvailableKeyCount } from '@/lib/store';
+import { Gift, Sparkles, Copy, Check, Infinity, Mail, Shield, ArrowRight, KeyRound } from 'lucide-react';
 import { cn, safeCopyToClipboard } from '@/lib/utils';
 
 type Step = 'email' | 'verify' | 'claimed';
@@ -20,11 +20,13 @@ export default function ClaimPage() {
   const [countdown, setCountdown] = useState(0);
   const [devCode, setDevCode] = useState<string | null>(null);
   const [availableCount, setAvailableCount] = useState(getAvailableKeyCount());
+  const verificationMode = getVerificationMode();
 
-  // Refresh available count on mount
   useEffect(() => {
     setAvailableCount(getAvailableKeyCount());
   }, []);
+
+  const needVerification = verificationMode !== 'none';
 
   const handleSendCode = async () => {
     if (!email.trim()) {
@@ -45,31 +47,37 @@ export default function ClaimPage() {
     setSendingEmail(false);
 
     if (result.success) {
-      setStep('verify');
-      setCountdown(60);
-      // Check if SMTP is properly configured
-      const smtp = getSmtpConfig();
-      const smtpEnabled = smtp.enabled && smtp.host && smtp.username && smtp.password && smtp.fromEmail;
+      if (needVerification) {
+        setStep('verify');
+        setCountdown(60);
 
-      if (smtpEnabled) {
-        // SMTP configured: code sent to email
-        toast.success('验证码已发送到你的邮箱，请查收');
-      } else {
-        // Dev mode: show verification code on page
-        const code = getDevVerificationCode(email);
-        if (code) {
-          setDevCode(code);
+        if (verificationMode === 'dev') {
+          const code = getDevVerificationCode(email);
+          if (code) {
+            setDevCode(code);
+          }
+          toast.success('验证码已生成，请在下方查看');
+        } else {
+          toast.success('验证码已发送到你的邮箱，请查收');
         }
-        toast.success('验证码已生成，请在下方查看');
-      }
 
-      // Countdown timer
-      const timer = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev <= 1) { clearInterval(timer); return 0; }
-          return prev - 1;
-        });
-      }, 1000);
+        const timer = setInterval(() => {
+          setCountdown((prev) => {
+            if (prev <= 1) { clearInterval(timer); return 0; }
+            return prev - 1;
+          });
+        }, 1000);
+      } else {
+        const key = claimCardKey(email);
+        if (key) {
+          setClaimedKey(key.code);
+          setStep('claimed');
+          setAvailableCount(getAvailableKeyCount());
+          toast.success('🎉 卡密领取成功！');
+        } else {
+          toast.error('暂无可用卡密，请联系管理员');
+        }
+      }
     } else {
       toast.error(result.error || '发送失败，请稍后重试');
     }
@@ -111,7 +119,6 @@ export default function ClaimPage() {
   return (
     <div className="min-h-screen grid-bg pt-24 pb-16 px-4">
       <div className="max-w-2xl mx-auto">
-        {/* Header */}
         <div className="text-center mb-10 animate-fade-in-up">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-primary text-sm font-medium mb-4">
             <Gift className="w-4 h-4" />
@@ -121,11 +128,10 @@ export default function ClaimPage() {
             <span className="text-gradient-cyan">领取你的专属卡密</span>
           </h1>
           <p className="text-muted-foreground text-lg">
-            通过邮箱验证领取永久有效卡密，每个邮箱仅限一次
+            {needVerification ? '通过邮箱验证领取永久有效卡密，每个邮箱仅限一次' : '输入邮箱直接领取，每个邮箱仅限一次'}
           </p>
         </div>
 
-        {/* Available Keys Count */}
         <div className="flex items-center justify-center mb-8 animate-fade-in-up stagger-1">
           <div className={cn(
             'inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border text-sm font-medium transition-all',
@@ -138,29 +144,29 @@ export default function ClaimPage() {
           </div>
         </div>
 
-        {/* Step Indicators */}
-        <div className="flex items-center justify-center gap-3 mb-6 animate-fade-in-up">
-          {[
-            { label: '输入邮箱', icon: Mail, active: step === 'email' },
-            { label: '验证邮箱', icon: Shield, active: step === 'verify' },
-            { label: '领取卡密', icon: Gift, active: step === 'claimed' },
-          ].map((s, i) => (
-            <div key={s.label} className="flex items-center gap-2">
-              <div className={cn(
-                'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all',
-                s.active ? 'bg-primary text-primary-foreground glow-cyan' : 'bg-secondary text-muted-foreground'
-              )}>
-                {i + 1}
+        {needVerification && (
+          <div className="flex items-center justify-center gap-3 mb-6 animate-fade-in-up">
+            {[
+              { label: '输入邮箱', icon: Mail, active: step === 'email' },
+              { label: '验证邮箱', icon: Shield, active: step === 'verify' },
+              { label: '领取卡密', icon: Gift, active: step === 'claimed' },
+            ].map((s, i) => (
+              <div key={s.label} className="flex items-center gap-2">
+                <div className={cn(
+                  'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all',
+                  s.active ? 'bg-primary text-primary-foreground glow-cyan' : 'bg-secondary text-muted-foreground'
+                )}>
+                  {i + 1}
+                </div>
+                <span className={cn('text-sm hidden sm:inline', s.active ? 'text-foreground font-medium' : 'text-muted-foreground')}>
+                  {s.label}
+                </span>
+                {i < 2 && <ArrowRight className="w-4 h-4 text-muted-foreground/50" />}
               </div>
-              <span className={cn('text-sm hidden sm:inline', s.active ? 'text-foreground font-medium' : 'text-muted-foreground')}>
-                {s.label}
-              </span>
-              {i < 2 && <ArrowRight className="w-4 h-4 text-muted-foreground/50" />}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
-        {/* Step 1: Email Input */}
         {step === 'email' && (
           <Card className="glass-card border-border/30 animate-fade-in-up stagger-2">
             <CardHeader>
@@ -168,7 +174,9 @@ export default function ClaimPage() {
                 <Mail className="w-5 h-5 text-primary" />
                 输入邮箱地址
               </CardTitle>
-              <CardDescription>输入你的邮箱，我们将发送验证码</CardDescription>
+              <CardDescription>
+                {needVerification ? '输入你的邮箱，我们将发送验证码' : '输入你的邮箱，直接领取卡密'}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex items-center justify-center">
@@ -198,16 +206,17 @@ export default function ClaimPage() {
               >
                 {sendingEmail ? (
                   <div className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                ) : (
+                ) : needVerification ? (
                   <Mail className="w-5 h-5" />
+                ) : (
+                  <Gift className="w-5 h-5" />
                 )}
-                {availableCount === 0 ? '暂无可用卡密' : sendingEmail ? '发送中...' : '发送验证码'}
+                {availableCount === 0 ? '暂无可用卡密' : sendingEmail ? '发送中...' : needVerification ? '发送验证码' : '直接领取'}
               </Button>
             </CardContent>
           </Card>
         )}
 
-        {/* Step 2: Verify Code */}
         {step === 'verify' && (
           <Card className="glass-card border-border/30 animate-fade-in-up stagger-2">
             <CardHeader>
@@ -233,7 +242,6 @@ export default function ClaimPage() {
                 />
               </div>
 
-              {/* Dev mode: show code prominently */}
               {devCode && (
                 <div className="rounded-xl p-5 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-400/30 text-center">
                   <div className="flex items-center justify-center gap-2 mb-2">
@@ -279,7 +287,6 @@ export default function ClaimPage() {
           </Card>
         )}
 
-        {/* Step 3: Claimed */}
         {step === 'claimed' && claimedKey && (
           <Card className="glass-card border-primary/30 glow-cyan animate-scale-in">
             <CardHeader>
@@ -317,13 +324,12 @@ export default function ClaimPage() {
           </Card>
         )}
 
-        {/* Tips */}
         <Card className="glass-card border-border/30 mt-6 animate-fade-in-up stagger-3">
           <CardContent className="p-6">
             <h3 className="text-sm font-semibold text-muted-foreground mb-3">💡 温馨提示</h3>
             <ul className="text-sm text-muted-foreground space-y-2">
               <li>• 每张卡密永久有效，每个邮箱仅限领取一次</li>
-              <li>• 验证码有效期为5分钟，请及时使用</li>
+              {needVerification && <li>• 验证码有效期为5分钟，请及时使用</li>}
               <li>• 卡密仅限使用一次，请妥善保管</li>
             </ul>
           </CardContent>
