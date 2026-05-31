@@ -46,6 +46,11 @@ function getDefaultState(): AppState {
 
 export function loadState(): AppState {
   try {
+    // Check if localStorage is available
+    if (typeof localStorage === 'undefined') {
+      return getDefaultState();
+    }
+    
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
@@ -65,16 +70,22 @@ export function loadState(): AppState {
   } catch (e) {
     console.warn('[Store] Failed to load state, using defaults:', e);
     // If corrupted data, clear it
-    try { localStorage.removeItem(STORAGE_KEY); } catch {}
+    try { 
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem(STORAGE_KEY); 
+      }
+    } catch {}
   }
   return getDefaultState();
 }
 
 export function saveState(state: AppState): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
   } catch {
-    // ignore
+    // ignore errors
   }
 }
 

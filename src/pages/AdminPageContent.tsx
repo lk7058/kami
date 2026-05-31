@@ -28,7 +28,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { toast } from 'sonner';
 import { cn, safeCopyToClipboard } from '@/lib/utils';
 import { format } from 'date-fns';
-import { zhCN } from 'date-fns/locale';
 import {
   verifyAdmin,
   getCardKeys,
@@ -75,6 +74,7 @@ export default function AdminPageContent() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [password, setPassword] = useState('');
   const [activeTab, setActiveTab] = useState('overview');
+  const [error, setError] = useState<string | null>(null);
 
   // Data
   const [cardKeys, setCardKeys] = useState<CardKey[]>([]);
@@ -82,7 +82,21 @@ export default function AdminPageContent() {
   const [searchQuery, setSearchQuery] = useState('');
 
   // SMTP
-  const [smtpConfig, setSmtpConfig] = useState<SmtpConfig>(getSmtpConfig());
+  const [smtpConfig, setSmtpConfig] = useState<SmtpConfig>(() => {
+    try {
+      return getSmtpConfig();
+    } catch {
+      return {
+        host: '',
+        port: 465,
+        username: '',
+        password: '',
+        fromEmail: '',
+        fromName: 'GPT Image2',
+        enabled: false,
+      };
+    }
+  });
   const [testingSmtp, setTestingSmtp] = useState(false);
   const [smtpTestResult, setSmtpTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -113,9 +127,15 @@ export default function AdminPageContent() {
   }, [isLoggedIn]);
 
   const refreshData = () => {
-    setCardKeys(getCardKeys());
-    setAnnouncements(getAnnouncements());
-    setSmtpConfig(getSmtpConfig());
+    try {
+      setCardKeys(getCardKeys());
+      setAnnouncements(getAnnouncements());
+      setSmtpConfig(getSmtpConfig());
+      setError(null);
+    } catch (err) {
+      console.error('[Admin] Failed to refresh data:', err);
+      setError('数据加载失败，请刷新页面重试');
+    }
   };
 
   const handleSaveSmtp = () => {
@@ -148,11 +168,18 @@ export default function AdminPageContent() {
   };
 
   const handleLogin = () => {
-    if (verifyAdmin(password)) {
-      setIsLoggedIn(true);
-      toast.success('登录成功');
-    } else {
-      toast.error('密码错误');
+    try {
+      if (verifyAdmin(password)) {
+        setIsLoggedIn(true);
+        setError(null);
+        toast.success('登录成功');
+      } else {
+        setError('密码错误');
+        toast.error('密码错误');
+      }
+    } catch (err) {
+      console.error('[Admin] Login error:', err);
+      setError('登录失败，请刷新页面重试');
     }
   };
 
@@ -290,6 +317,11 @@ export default function AdminPageContent() {
             <CardDescription>输入管理员密码以继续</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {error && (
+              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-sm">
+                {error}
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="admin-password">管理员密码</Label>
               <div className="relative">
@@ -298,7 +330,10 @@ export default function AdminPageContent() {
                   type={showPasswordText ? 'text' : 'password'}
                   placeholder="请输入密码"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setError(null);
+                  }}
                   onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
                   className="pr-10 bg-secondary/50 border-border/50 focus:border-primary/50 h-12"
                 />
@@ -539,9 +574,12 @@ export default function AdminPageContent() {
                                 variant="ghost"
                                 size="icon"
                                 className="w-6 h-6 shrink-0"
-                                onClick={async () => {
-                                  const success = await safeCopyToClipboard(key.code);
-                                  toast[success ? 'success' : 'error'](success ? '已复制' : '复制失败');
+                                onClick={() => {
+                                  safeCopyToClipboard(key.code).then((success) => {
+                                    toast[success ? 'success' : 'error'](success ? '已复制' : '复制失败');
+                                  }).catch(() => {
+                                    toast.error('复制失败');
+                                  });
                                 }}
                               >
                                 <Copy className="w-3 h-3" />
@@ -560,7 +598,7 @@ export default function AdminPageContent() {
                           <TableCell className="text-muted-foreground text-sm">{key.claimedBy || '-'}</TableCell>
                           <TableCell className="text-muted-foreground text-sm max-w-[120px] truncate">{key.note || '-'}</TableCell>
                           <TableCell className="text-muted-foreground text-sm">
-                            {format(new Date(key.createdAt), 'MM-dd HH:mm', { locale: zhCN })}
+                            {format(new Date(key.createdAt), 'MM-dd HH:mm')}
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1">
@@ -636,8 +674,8 @@ export default function AdminPageContent() {
                         </div>
                         <p className="text-xs text-muted-foreground line-clamp-2">{a.content}</p>
                         <p className="text-xs text-muted-foreground/60 mt-1">
-                          {format(new Date(a.createdAt), 'yyyy-MM-dd HH:mm', { locale: zhCN })}
-                        </p>
+                            {format(new Date(a.createdAt), 'yyyy-MM-dd HH:mm')}
+                          </p>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => handleEditAnnouncement(a)}>
