@@ -6,7 +6,7 @@
   <title>GPT Image2</title>
   <script>
     // SPA fallback: redirect to index.html with the original path
-    const path = window.location.pathname;
+    var path = window.location.pathname;
     if (path !== '/' && path !== '/index.html') {
       sessionStorage.setItem('spa-redirect-path', path);
     }

@@ -1,6 +1,6 @@
-import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
-import { useEffect, useRef, Component, type ReactNode, type ErrorInfo } from 'react';
+import { useEffect, Component, type ReactNode, type ErrorInfo } from 'react';
 import Navbar from '@/components/Navbar';
 import HomePage from '@/pages/HomePage';
 import ClaimPage from '@/pages/ClaimPage';
@@ -9,7 +9,6 @@ import AnnouncementsPage from '@/pages/AnnouncementsPage';
 import DrawPage from '@/pages/DrawPage';
 import AdminPageContent from '@/pages/AdminPageContent';
 
-// ─── Global Error Boundary ───
 class AppErrorBoundary extends Component<
   { children: ReactNode },
   { hasError: boolean; error: Error | null }
@@ -45,21 +44,14 @@ class AppErrorBoundary extends Component<
   }
 }
 
-// SPA 路由回退：从 404.html 重定向后恢复原始路径
-function SpaRedirectHandler() {
-  const location = useLocation();
-  const hasProcessed = useRef(false);
-
+function SpaRouteInitializer() {
   useEffect(() => {
-    if (hasProcessed.current) return;
-    hasProcessed.current = true;
-
     const redirectPath = sessionStorage.getItem('spa-redirect-path');
-    if (redirectPath && redirectPath !== location.pathname && redirectPath !== '/index.html') {
+    if (redirectPath) {
       sessionStorage.removeItem('spa-redirect-path');
       window.history.replaceState(null, '', redirectPath);
     }
-  }, [location]);
+  }, []);
 
   return null;
 }
@@ -89,7 +81,7 @@ function App() {
   return (
     <AppErrorBoundary>
       <BrowserRouter>
-        <SpaRedirectHandler />
+        <SpaRouteInitializer />
         <Routes>
           <Route path="/draw" element={<AppLayout><DrawPage /></AppLayout>} />
           <Route path="/" element={<AppLayout><HomePage /></AppLayout>} />
