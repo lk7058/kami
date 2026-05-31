@@ -1,6 +1,6 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
-import { useEffect, Component, type ReactNode, type ErrorInfo } from 'react';
+import { Component, type ReactNode, type ErrorInfo } from 'react';
 import Navbar from '@/components/Navbar';
 import HomePage from '@/pages/HomePage';
 import ClaimPage from '@/pages/ClaimPage';
@@ -44,18 +44,6 @@ class AppErrorBoundary extends Component<
   }
 }
 
-function SpaRouteInitializer() {
-  useEffect(() => {
-    const redirectPath = sessionStorage.getItem('spa-redirect-path');
-    if (redirectPath) {
-      sessionStorage.removeItem('spa-redirect-path');
-      window.history.replaceState(null, '', redirectPath);
-    }
-  }, []);
-
-  return null;
-}
-
 function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background">
@@ -80,18 +68,17 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 function App() {
   return (
     <AppErrorBoundary>
-      <BrowserRouter>
-        <SpaRouteInitializer />
+      <HashRouter>
         <Routes>
-          <Route path="/draw" element={<AppLayout><DrawPage /></AppLayout>} />
           <Route path="/" element={<AppLayout><HomePage /></AppLayout>} />
+          <Route path="/draw" element={<AppLayout><DrawPage /></AppLayout>} />
           <Route path="/claim" element={<AppLayout><ClaimPage /></AppLayout>} />
           <Route path="/query" element={<AppLayout><QueryPage /></AppLayout>} />
           <Route path="/announcements" element={<AppLayout><AnnouncementsPage /></AppLayout>} />
           <Route path="/admin" element={<AppLayout><AdminPageContent /></AppLayout>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-      </BrowserRouter>
+      </HashRouter>
     </AppErrorBoundary>
   );
 }

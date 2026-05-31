@@ -13,11 +13,11 @@ import {
 } from 'lucide-react';
 
 const navItems = [
-  { path: '/', label: '首页', icon: Home },
-  { path: '/claim', label: '领取卡密', icon: Gift },
-  { path: '/query', label: '查询卡密', icon: Search },
-  { path: '/announcements', label: '公告', icon: Megaphone },
-  { path: '/draw', label: 'AI 画图', icon: Palette },
+  { path: '#/', label: '首页', icon: Home },
+  { path: '#/claim', label: '领取卡密', icon: Gift },
+  { path: '#/query', label: '查询卡密', icon: Search },
+  { path: '#/announcements', label: '公告', icon: Megaphone },
+  { path: '#/draw', label: 'AI 画图', icon: Palette },
 ];
 
 export default function Navbar() {
@@ -29,7 +29,7 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-2 group">
+          <Link to="#/" className="flex items-center gap-2 group">
             <div className="relative">
               <Sparkles className="w-7 h-7 text-primary" />
               <div className="absolute inset-0 w-7 h-7 bg-primary/20 rounded-full blur-md animate-glow-pulse" />
@@ -41,7 +41,7 @@ export default function Navbar() {
           <div className="hidden md:flex items-center gap-1">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive = location.pathname === item.path;
+              const isActive = location.hash === item.path || location.pathname === item.path.replace('#', '');
               return (
                 <Link
                   key={item.path}
@@ -76,7 +76,7 @@ export default function Navbar() {
           <div className="px-4 py-3 space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive = location.pathname === item.path;
+              const isActive = location.hash === item.path || location.pathname === item.path.replace('#', '');
               return (
                 <Link
                   key={item.path}
