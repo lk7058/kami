@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
-import { useEffect, Component, type ReactNode, type ErrorInfo } from 'react';
+import { useEffect, useRef, Component, type ReactNode, type ErrorInfo } from 'react';
 import Navbar from '@/components/Navbar';
 import HomePage from '@/pages/HomePage';
 import ClaimPage from '@/pages/ClaimPage';
@@ -48,14 +48,19 @@ class AppErrorBoundary extends Component<
 // SPA 路由回退：从 404.html 重定向后恢复原始路径
 function SpaRedirectHandler() {
   const location = useLocation();
+  const hasProcessed = useRef(false);
+
   useEffect(() => {
+    if (hasProcessed.current) return;
+    hasProcessed.current = true;
+
     const redirectPath = sessionStorage.getItem('spa-redirect-path');
-    if (redirectPath && redirectPath !== location.pathname) {
+    if (redirectPath && redirectPath !== location.pathname && redirectPath !== '/index.html') {
       sessionStorage.removeItem('spa-redirect-path');
       window.history.replaceState(null, '', redirectPath);
-      window.location.reload();
     }
   }, [location]);
+
   return null;
 }
 
