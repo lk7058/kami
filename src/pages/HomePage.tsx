@@ -106,14 +106,14 @@ export default function HomePage() {
 
             {/* CTA Buttons */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-in-up stagger-3">
-              <Link to="#/draw">
+              <Link to="/draw">
                 <Button size="lg" className="gap-2 text-base px-8 py-6 glow-cyan hover:glow-cyan transition-all duration-300">
                   <Palette className="w-5 h-5" />
                   开始画图
                   <ArrowRight className="w-4 h-4" />
                 </Button>
               </Link>
-              <Link to="#/claim">
+              <Link to="/claim">
                 <Button size="lg" variant="outline" className="gap-2 text-base px-8 py-6 border-primary/30 hover:bg-primary/10 hover:border-primary/50 transition-all duration-300">
                   <Sparkles className="w-5 h-5" />
                   领取卡密
@@ -203,13 +203,13 @@ export default function HomePage() {
                 领取你的专属卡密，立即体验 GPT Image2 的强大功能
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                <Link to="#/claim">
+                <Link to="/claim">
                   <Button size="lg" className="gap-2 px-8 glow-cyan hover:glow-cyan transition-all">
                     <Gift className="w-5 h-5" />
                     领取卡密
                   </Button>
                 </Link>
-                <Link to="#/announcements">
+                <Link to="/announcements">
                   <Button size="lg" variant="outline" className="gap-2 px-8 border-border/30 hover:bg-secondary/50">
                     <Megaphone className="w-5 h-5" />
                     查看公告
